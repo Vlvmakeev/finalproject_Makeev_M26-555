@@ -29,3 +29,14 @@ exclude = ["venv", ".venv", "dist", "__pycache__"]
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = []
+
+[tool.valutatrade]
+USERS_FILE_PATH = "data/users.json"
+PORTFOLIOS_FILE_PATH = "data/portfolios.json"
+RATES_FILE_PATH = "data/rates.json"
+EXCHANGE_RATES_FILE_PATH = "data/exchange_rates.json"
+LOG_FILE_PATH = "logs/actions.log"
+LOG_LEVEL = "INFO"
+RATES_TTL_SECONDS = 300
+DEFAULT_BASE_CURRENCY = "USD"
+REQUEST_TIMEOUT = 10

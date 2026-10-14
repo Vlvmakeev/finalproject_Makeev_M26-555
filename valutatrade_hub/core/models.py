@@ -34,7 +34,6 @@ class User:
     def user_id(self) -> int:
         return self._user_id
 
-
     @property
     def username(self) -> str:
         return self._username
