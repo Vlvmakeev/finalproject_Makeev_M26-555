@@ -96,5 +96,48 @@ def sell_command(args):
     except Exception as e:
         print(f"Ошибка продажи: {str(e)}")
 
+
+def update_rates_command(args):
+    """Команда обновления курсов валют."""
+    params = parse_named_args(args)
+    source = params.get("source")
+
+    try:
+        from valutatrade_hub.parser_service.config import ParserConfig
+        from valutatrade_hub.parser_service.api_clients import (
+            CoinGeckoClient,
+            ExchangeRateApiClient,
+        )
+        from valutatrade_hub.parser_service.updater import RatesUpdater
+        from valutatrade_hub.parser_service.storage import RatesStorage
+
+        # Создаем конфигурацию
+        config = ParserConfig()
+
+        # Проверяем конфигурацию
+        if not config.is_valid():
+            warning = config.get_warning_message()
+            print(f"WARNING: {warning}")
+            print("Some sources may not be available.\n")
+
+        # Создаем хранилище
+        storage = RatesStorage(config)
+
+        # Создаем клиенты
+        clients = [
+            CoinGeckoClient(config),
+            ExchangeRateApiClient(config),
+        ]
+
+        # Создаем апдейтер и запускаем обновление
+        updater = RatesUpdater(clients, storage, config)
+        result = updater.run_update(source=source)
+
+    except ImportError as e:
+        print(f"ERROR: Missing dependencies - {str(e)}")
+        print("Please run: uv add requests")
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+
 def create_parser():
     """Создает парсер аргументов командной строки."""
