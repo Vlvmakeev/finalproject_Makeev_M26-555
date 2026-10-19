@@ -1,53 +1,81 @@
-class InsufficientFundsError(Exception):
-    """
-    Исключение: недостаточно средств для операции
+"""Пользовательские исключения доменной модели.
 
-    Наследуется от Exception
-    """
+Все исключения несут готовое пользовательское сообщение в ``str(exc)``,
+поэтому CLI может печатать их как есть.
+"""
+
+
+class ValutaTradeError(Exception):
+    """Базовое исключение проекта."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+class InsufficientFundsError(ValutaTradeError):
+    """Недостаточно средств для операции."""
 
     def __init__(self, available: float, required: float, code: str):
         """
         Args:
-        :param available: Доступная сумма
-        :param required: Требуемая сумма
-        :param code: Код валюты
+            available: Доступная сумма.
+            required: Требуемая сумма.
+            code: Код валюты.
         """
-        self.message = f"Недостаточно средств: доступно {available:.4f} {code}, требуется {required:.4f} {code}"
+        self.available = available
+        self.required = required
+        self.code = code
+        message = (
+            f"Недостаточно средств: доступно {available:.4f} {code}, "
+            f"требуется {required:.4f} {code}"
+        )
+        super().__init__(message)
 
-        super().__init__(self.message)
 
-class CurrencyNitFoundError(Exception):
-    """Исключение: валюта не найдена."""
+class CurrencyNotFoundError(ValutaTradeError):
+    """Неизвестная валюта."""
 
     def __init__(self, code: str):
-        self.message = f"Неизвестная валюта '{code}'"
-        super().__init__(self.message)
+        self.code = code
+        super().__init__(f"Неизвестная валюта '{code}'")
 
-class ApiRequestError(Exception):
-    """Исключение: ошибка при обращении к внешнему API"""
+
+class ApiRequestError(ValutaTradeError):
+    """Сбой при обращении к внешнему API."""
 
     def __init__(self, reason: str):
-        self.message = f"Ошибка при обращении к внешнему API: {reason}"
-        super().__init__(self.message)
+        self.reason = reason
+        super().__init__(f"Ошибка при обращении к внешнему API: {reason}")
 
 
-class UserNotFoundError(Exception):
-    """Исключение: пользователь на найден"""
-
-    def __init__(self, username: str):
-        self.message = f"Пользователь '{username}' не найден"
-        super().__init__(self.message)
-
-class InvalidPasswordError(Exception):
-    """Исключение: неверный пароль"""
-
-    def __int__(self):
-        self.message = "Неверный пароль"
-        super().__init__(self.message)
-
-class UsernameAlreadyExistsError(Exception):
-    """Исключение: имя пользователя уже занято"""
+class UserNotFoundError(ValutaTradeError):
+    """Пользователь не найден."""
 
     def __init__(self, username: str):
-        self.message = f"Имя пользователя '{username}' уже занято"
-        super().__init__(self.message)
+        self.username = username
+        super().__init__(f"Пользователь '{username}' не найден")
+
+
+class InvalidPasswordError(ValutaTradeError):
+    """Неверный пароль."""
+
+    def __init__(self, username: str | None = None):
+        self.username = username
+        super().__init__("Неверный пароль")
+
+
+class UsernameAlreadyExistsError(ValutaTradeError):
+    """Имя пользователя уже занято."""
+
+    def __init__(self, username: str):
+        self.username = username
+        super().__init__(f"Имя пользователя '{username}' уже занято")
+
+
+class StorageError(ValutaTradeError):
+    """Ошибка чтения/записи хранилища."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(f"Ошибка хранилища: {reason}")

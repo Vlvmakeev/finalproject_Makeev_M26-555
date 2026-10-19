@@ -1,22 +1,24 @@
+"""API-клиенты Parser Service для получения курсов валют."""
+
 import logging
-from abc import abstractmethod, ABC
-from http.client import responses
-from typing import Dict, Optional
+from abc import ABC, abstractmethod
+from typing import Optional
 
 import requests
 
 from valutatrade_hub.core.exceptions import ApiRequestError
 from valutatrade_hub.parser_service.config import ParserConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("valutatrade_hub.parser_service.api_clients")
+
 
 class BaseApiClient(ABC):
+    """Базовый клиент для внешнего API курсов."""
+
     def __init__(self, config: ParserConfig):
         """
-        Инициализация клиента.
-
         Args:
-            config: Конфигурация Parser Service
+            config: Конфигурация Parser Service.
         """
         self.config = config
 
@@ -26,163 +28,112 @@ class BaseApiClient(ABC):
         return self.__class__.__name__
 
     @abstractmethod
-    def fetch_rates(self) -> Dict[str, float]:
-        """
-        Получает курсы валют.
+    def fetch_rates(self) -> dict[str, float]:
+        """Возвращает курсы вида ``{"BTC_USD": 59337.21}``."""
+        raise NotImplementedError
 
-        Абстрактный метод — наследники обязаны его реализовать.
-
-        Returns:
-            Словарь с курсами валют
-        """
-        pass
-
-    def _make_request(self, url: str, params: Optional[dict] = None) -> requests.Response:
-        """
-        Выполняет HTTP-запрос с обработкой ошибок.
-
-        Переиспользуемый метод для всех клиентов.
-
-        Args:
-            url: URL для запроса
-            params: Параметры запроса
-
-        Returns:
-            Ответ от сервера
+    def _make_request(
+        self, url: str, params: Optional[dict] = None
+    ) -> requests.Response:
+        """Выполняет HTTP GET с обработкой ошибок.
 
         Raises:
-            ApiRequestError: Если запрос не удался
+            ApiRequestError: При ошибке сети, лимите, неверном ключе и т.п.
         """
         try:
-            response = requests.get(url, params=params, timeout=self.config.REQUEST_TIMEOUT)
+            response = requests.get(
+                url,
+                params=params,
+                timeout=self.config.REQUEST_TIMEOUT,
+            )
+        except requests.exceptions.Timeout as exc:
+            raise ApiRequestError(f"{self.name}: request timed out") from exc
+        except requests.exceptions.ConnectionError as exc:
+            raise ApiRequestError(f"{self.name}: connection error") from exc
+        except requests.exceptions.RequestException as exc:
+            raise ApiRequestError(f"{self.name}: network error - {exc}") from exc
 
-            if response.status_code == 401:
-                raise ApiRequestError(f"{self.name}: Invalid API key (401)")
-            elif response.status_code == 429:
-                raise ApiRequestError(f"{self.name}: Rate limit exceeded (429)")
-            elif response.status_code != 200:
-                raise ApiRequestError(
-                    f"{self.name}: HTTP {response.status_code} - {response.reason}"
-                )
+        if response.status_code == 401:
+            raise ApiRequestError(f"{self.name}: invalid API key (401)")
+        if response.status_code == 429:
+            raise ApiRequestError(f"{self.name}: rate limit exceeded (429)")
+        if response.status_code != 200:
+            raise ApiRequestError(
+                f"{self.name}: HTTP {response.status_code} - {response.reason}"
+            )
 
-            return response
+        return response
 
-        except requests.exceptions.Timeout:
-            raise ApiRequestError(f"{self.name}: Request timed out")
-        except requests.exceptions.ConnectionError:
-            raise ApiRequestError(f"{self.name}: Connection error")
-        except requests.exceptions.RequestException as e:
-            raise ApiRequestError(f"{self.name}: Network error - {str(e)}")
 
 class CoinGeckoClient(BaseApiClient):
-    """
-    Клиент для получения курсов криптовалют с CoinGecko
-
-    Использует публичный API без ключа
-    """
+    """Клиент CoinGecko для курсов криптовалют (публичный API)."""
 
     @property
     def name(self) -> str:
         return "CoinGecko"
 
-    def fetch_rates(self) -> Dict[str, float]:
-        """
-        Получает курсы криптовалют с CoinGecko.
-
-        Returns:
-            Словарь с курсами криптовалют
-
-        Raises:
-            ApiRequestError: Если запрос не удался
-        """
-
-        ids = ",".join([
+    def fetch_rates(self) -> dict[str, float]:
+        """Получает курсы криптовалют к базовой валюте."""
+        ids = ",".join(
             self.config.CRYPTO_ID_MAP[code]
             for code in self.config.CRYPTO_CURRENCIES
             if code in self.config.CRYPTO_ID_MAP
-        ])
-
+        )
         if not ids:
-            logger.warning(f"{self.name}:  No crypto currencies configured")
+            logger.warning("%s: no crypto currencies configured", self.name)
             return {}
 
-        params = {
-            "ids": ids,
-            "vs_currencies": self.config.BASE_CURRENCY.lower()
-        }
-
-        logger.info(f"Fetching from {self.name}...")
-
-        responses = self._make_request(self.config.COINGECKO_URL, params)
-
-        data = responses.json()
-
-        rates = {}
         base = self.config.BASE_CURRENCY
+        params = {"ids": ids, "vs_currencies": base.lower()}
 
+        logger.info("Fetching from %s...", self.name)
+        response = self._make_request(self.config.COINGECKO_URL, params)
+        data = response.json()
+
+        rates: dict[str, float] = {}
         for code, crypto_id in self.config.CRYPTO_ID_MAP.items():
-            if crypto_id in data and base.lower() in data[crypto_id]:
-                pair_key = f"{code}_{base}"
-                rates[pair_key] = data[crypto_id][base.lower()]
+            entry = data.get(crypto_id)
+            if isinstance(entry, dict) and base.lower() in entry:
+                rates[f"{code}_{base}"] = float(entry[base.lower()])
 
-        logger.info(f"{self.name}: OK ({len(rates)} rates)")
+        logger.info("%s: OK (%d rates)", self.name, len(rates))
         return rates
 
-class ExchangeRateApiClient(BaseApiClient):
-    """
-    Клиент для получения курсов фиатных валют с ExchangeRate-API.
 
-    Требует API-ключ.
-    """
+class ExchangeRateApiClient(BaseApiClient):
+    """Клиент ExchangeRate-API для курсов фиатных валют."""
 
     @property
     def name(self) -> str:
         return "ExchangeRate-API"
 
-    def fetch_rates(self) -> Dict[str, float]:
-        """
-        Получает курсы фиатных валют с ExchangeRate-API.
-
-        Returns:
-            Словарь с курсами фиатных валют
-
-        Raises:
-            ApiRequestError: Если запрос не удался или ключ не настроен
-        """
+    def fetch_rates(self) -> dict[str, float]:
+        """Получает курсы фиатных валют к базовой валюте."""
         if not self.config.EXCHANGERATE_API_KEY:
             raise ApiRequestError(
-                f"{self.name}: API key not configured"
+                f"{self.name}: API key not configured. "
                 "Set EXCHANGERATE_API_KEY environment variable."
             )
 
         base = self.config.BASE_CURRENCY
         url = (
             f"{self.config.EXCHANGERATE_API_URL}/"
-            f"{self.config.EXCHANGERATE_API_KEY}/"
-            f"latest/{base}"
+            f"{self.config.EXCHANGERATE_API_KEY}/latest/{base}"
         )
 
-        logger.info(f"Fetching from {self.name}...")
-
-        # Выполняем запрос
+        logger.info("Fetching from %s...", self.name)
         response = self._make_request(url)
-
-        # Парсим ответ
         data = response.json()
 
-        # Проверяем результат
         if data.get("result") != "success":
             error_type = data.get("error-type", "unknown")
             raise ApiRequestError(f"{self.name}: API error - {error_type}")
 
-        # Приводим к стандартизированному формату
-        rates = {}
+        rates: dict[str, float] = {}
         api_rates = data.get("rates", {})
-
         for code in self.config.FIAT_CURRENCIES:
             if code in api_rates:
-                pair_key = f"{code}_{base}"
-                rates[pair_key] = api_rates[code]
+                rates[f"{code}_{base}"] = float(api_rates[code])
 
-        logger.info(f"{self.name}: OK ({len(rates)} rates)")
+        logger.info("%s: OK (%d rates)", self.name, len(rates))
         return rates

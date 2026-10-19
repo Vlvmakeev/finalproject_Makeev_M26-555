@@ -1,14 +1,16 @@
 import os
 from dataclasses import dataclass, field
 
+
 @dataclass
 class ParserConfig:
     """
-       Конфигурация для Parser Service.
+    Конфигурация для Parser Service.
 
-       Все параметры, которые могут меняться, вынесены сюда,
-       чтобы не хардкодить их в коде.
+    Все параметры, которые могут меняться, вынесены сюда,
+    чтобы не хардкодить их в коде.
     """
+
     EXCHANGERATE_API_KEY: str = ""
 
     COINGECKO_URL: str = "https://api.coingecko.com/api/v3/simple/price"
@@ -37,11 +39,7 @@ class ParserConfig:
             self.EXCHANGERATE_API_KEY = os.getenv("EXCHANGERATE_API_KEY", "")
 
         if not self.CRYPTO_ID_MAP:
-            self.CRYPTO_ID_MAP = {
-                "BTC": "bitcoin",
-                "ETH": "ethereum",
-                "SOL": "solana"
-            }
+            self.CRYPTO_ID_MAP = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
 
     def is_valid(self) -> bool:
         """

@@ -12,3 +12,16 @@ wheels/
 # Secrets
 .env
 .env.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and caches
+logs/
+.ruff_cache/
+
+# Local data snapshots (created at runtime)
+data/*.tmp
+data/exchange_rates.json

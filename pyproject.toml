@@ -1,7 +1,7 @@
 [project]
 name = "finalproject-makeev-m26-555"
 version = "0.1.0"
-description = "Add your description here"
+description = "ValutaTrade Hub — консольный симулятор валютного кошелька с сервисом парсинга курсов."
 readme = "README.md"
 authors = [
     { name = "VladimirMakeev", email = "vlvmakeev88@gmail.com" }
@@ -9,10 +9,12 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "requests>=2.34.2",
+    "prettytable>=3.10.0",
 ]
 
 [project.scripts]
-finalproject-makeev-m26-555 = "finalproject_makeev_m26_555:main"
+valutatrade = "finalproject_makeev_m26_555:run"
+finalproject-makeev-m26-555 = "finalproject_makeev_m26_555:run"
 
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
