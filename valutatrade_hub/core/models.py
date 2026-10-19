@@ -6,16 +6,15 @@ from valutatrade_hub.core.exceptions import InsufficientFundsError
 
 
 class User:
-    """Пользователь приложения.
+    """Класс, представляющий пользователя системы.
 
-    Хранит учетные данные, хеш пароля и соль.
-    Пароль в открытом виде не хранится нигде.
+    Атрибуты:
+        _user_id (int): Уникальный идентификатор пользователя
+        _username (str): Имя пользователя
+        _hashed_password (str): Хешированный пароль
+        _salt (str): Соль для хеширования
+        _registration_date (datetime): Дата регистрации
     """
-    _user_id: int
-    _username: str
-    _hashed_password: str
-    _salt: str
-    _registration_date: datetime
 
     def __init__(
             self,
@@ -25,11 +24,16 @@ class User:
             salt: str,
             registration_date: datetime
         ):
+
+        if not username or not isinstance(username, str):
+            raise ValueError("Имя пользователя не может быть пустым")
+
         self._user_id = user_id
         self._username = username
         self._hashed_password = hashed_password
         self._salt = salt
         self._registration_date = registration_date
+
 
 
     @property
@@ -111,9 +115,11 @@ class User:
 
 
 class Wallet:
-    """Колшелек пользователя для одной конкретной валюты"""
-    _currency_code: str
-    _balance: float
+    """Колшелек пользователя для одной конкретной валюты
+    Атрибуты:
+        currency_code (str): Код валюты (например, "USD", "BTC")
+        _balance (float): Баланс в данной валюте
+    """
 
     def __init__(self, currency_code: str, balance: float = 0.0) -> None:
         if not isinstance(currency_code, str) or not currency_code.strip():
@@ -195,17 +201,17 @@ class Portfolio:
         "ETH": 3000.0
     }
 
-    _user_id: int
-    _wallets: dict[str, Wallet]
-
     def __init__(self,
                  user_id: int,
-                 user=None,
                  wallets: dict[str, Wallet] | None = None
                  ):
         self._user_id = user_id
-        self._user = user
-        self._wallets: dict[str, Wallet] = wallets or {}
+        if wallets is None:
+            self._wallets = {}
+        else:
+            self._wallets = wallets
+
+        self._user = None
 
     @property
     def user(self) -> User | None:
