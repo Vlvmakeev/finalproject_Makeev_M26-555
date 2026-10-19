@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -140,4 +140,4 @@ class RatesStorage:
     @staticmethod
     def utc_timestamp() -> str:
         """Возвращает текущее время в ISO-UTC с суффиксом ``Z``."""
-        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

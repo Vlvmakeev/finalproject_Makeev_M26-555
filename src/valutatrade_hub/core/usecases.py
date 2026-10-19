@@ -100,27 +100,55 @@ def get_user(user_id: int) -> User:
 
 
 def get_portfolio(user_id: int) -> Portfolio:
-    """Загружает портфель пользователя (создаёт пустой при отсутствии)."""
+    """Загружает портфель пользователя (создаёт пустой при отсутствии).
+
+    Если в хранилище несколько записей с одним ``user_id`` (например, из-за
+    сбоя записи), лишние удаляются, а файл перезаписывается.
+    """
     portfolios = load_json("PORTFOLIOS_FILE")
-    data = find_by(portfolios, user_id=user_id)
-    if data is None:
+    matches = [item for item in portfolios if item.get("user_id") == user_id]
+    if not matches:
         portfolio = Portfolio(user_id)
         portfolios.append(portfolio.to_dict())
         save_json("PORTFOLIOS_FILE", portfolios)
         return portfolio
-    return Portfolio.from_dict(data)
+
+    if len(matches) > 1:
+        logger.warning(
+            "Обнаружены дубликаты портфеля для user_id=%s (%d шт.). Удаляю лишние.",
+            user_id,
+            len(matches),
+        )
+        seen = False
+        deduped = []
+        for item in portfolios:
+            if item.get("user_id") == user_id:
+                if seen:
+                    continue
+                seen = True
+            deduped.append(item)
+        save_json("PORTFOLIOS_FILE", deduped)
+
+    return Portfolio.from_dict(matches[0])
 
 
 def _save_portfolio(portfolio: Portfolio) -> None:
-    """Сохраняет изменения портфеля в хранилище."""
+    """Сохраняет изменения портфеля, убирая возможные дубликаты по ``user_id``."""
     portfolios = load_json("PORTFOLIOS_FILE")
-    for index, item in enumerate(portfolios):
+    updated = portfolio.to_dict()
+    replaced = False
+    result = []
+    for item in portfolios:
         if item.get("user_id") == portfolio.user_id:
-            portfolios[index] = portfolio.to_dict()
-            break
-    else:
-        portfolios.append(portfolio.to_dict())
-    save_json("PORTFOLIOS_FILE", portfolios)
+            if replaced:
+                continue  # лишний дубликат — отбрасываем
+            result.append(updated)
+            replaced = True
+        else:
+            result.append(item)
+    if not replaced:
+        result.append(updated)
+    save_json("PORTFOLIOS_FILE", result)
 
 
 def load_cached_rates() -> dict[str, dict[str, Any]]:

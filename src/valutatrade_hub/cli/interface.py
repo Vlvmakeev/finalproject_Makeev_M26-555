@@ -3,11 +3,16 @@
 CLI только разбирает аргументы и вызывает бизнес-логику из
 ``valutatrade_hub.core.usecases``; доменные исключения перехватываются и
 превращаются в дружелюбные сообщения.
+
+Строка ввода пользователя разбирается модулем :mod:`shlex`, а флаги
+(``--username`` и т.п.) — небольшим реестром команд вместо ``argparse``.
 """
 
-import argparse
+import shlex
 import sys
-from typing import Any
+from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Any, Callable
 
 from prettytable import PrettyTable
 
@@ -39,12 +44,13 @@ def _require_login() -> int | None:
     return _current_user_id
 
 
-def register_command(args: argparse.Namespace) -> None:
+def register_command(args: SimpleNamespace) -> None:
     """Команда регистрации нового пользователя."""
     try:
         user = usecases.register(username=args.username, password=args.password)
+        quoted = shlex.quote(args.username)
         print(f"Пользователь '{args.username}' зарегистрирован (id={user.user_id}).")
-        print(f"Войдите: login --username {args.username} --password ****")
+        print(f"Войдите: login --username {quoted} --password ****")
     except UsernameAlreadyExistsError as exc:
         print(exc.message)
     except ValueError as exc:
@@ -53,7 +59,7 @@ def register_command(args: argparse.Namespace) -> None:
         print(exc.message)
 
 
-def login_command(args: argparse.Namespace) -> None:
+def login_command(args: SimpleNamespace) -> None:
     """Команда входа в систему."""
     global _current_user_id
     try:
@@ -68,14 +74,14 @@ def login_command(args: argparse.Namespace) -> None:
         print(exc.message)
 
 
-def logout_command(_args: argparse.Namespace) -> None:
+def logout_command(_args: SimpleNamespace) -> None:
     """Команда выхода из системы."""
     global _current_user_id
     _current_user_id = None
     print("Вы вышли из системы")
 
 
-def show_portfolio_command(args: argparse.Namespace) -> None:
+def show_portfolio_command(args: SimpleNamespace) -> None:
     """Команда показа портфеля и итоговой стоимости."""
     user_id = _require_login()
     if user_id is None:
@@ -105,7 +111,7 @@ def show_portfolio_command(args: argparse.Namespace) -> None:
     print(f"ИТОГО: {view['total']:,.2f} {view['base']}")
 
 
-def buy_command(args: argparse.Namespace) -> None:
+def buy_command(args: SimpleNamespace) -> None:
     """Команда покупки валюты."""
     user_id = _require_login()
     if user_id is None:
@@ -136,7 +142,7 @@ def buy_command(args: argparse.Namespace) -> None:
     print(f"Оценочная стоимость покупки: {result['value']:,.2f} {result['base']}")
 
 
-def sell_command(args: argparse.Namespace) -> None:
+def sell_command(args: SimpleNamespace) -> None:
     """Команда продажи валюты."""
     user_id = _require_login()
     if user_id is None:
@@ -167,7 +173,7 @@ def sell_command(args: argparse.Namespace) -> None:
     print(f"Оценочная выручка: {result['value']:,.2f} {result['base']}")
 
 
-def get_rate_command(args: argparse.Namespace) -> None:
+def get_rate_command(args: SimpleNamespace) -> None:
     """Команда получения курса одной валюты к другой."""
     try:
         result = usecases.get_rate(args.from_currency, args.to_currency)
@@ -189,7 +195,7 @@ def get_rate_command(args: argparse.Namespace) -> None:
         print(f"Обратный курс {result['to']}→{result['from']}: {reverse_str}")
 
 
-def update_rates_command(args: argparse.Namespace) -> None:
+def update_rates_command(args: SimpleNamespace) -> None:
     """Команда обновления курсов через Parser Service."""
     try:
         from valutatrade_hub.parser_service.api_clients import (
@@ -252,7 +258,7 @@ def _rates_to_usd(pairs: dict[str, Any]) -> dict[str, float]:
     return rates
 
 
-def show_rates_command(args: argparse.Namespace) -> None:
+def show_rates_command(args: SimpleNamespace) -> None:
     """Команда показа курсов из локального кеша."""
     pairs = _load_cache_pairs()
     if not pairs:
@@ -308,78 +314,275 @@ def show_rates_command(args: argparse.Namespace) -> None:
     print(table)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    """Собирает парсер аргументов командной строки."""
-    parser = argparse.ArgumentParser(
-        prog="valutatrade",
-        description="ValutaTrade Hub — симулятор валютного кошелька.",
-    )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+@dataclass(frozen=True)
+class _Option:
+    """Описание одного флага команды (``--name``)."""
 
-    p_register = subparsers.add_parser("register", help="Создать пользователя")
-    p_register.add_argument("--username", required=True)
-    p_register.add_argument("--password", required=True)
-    p_register.set_defaults(func=register_command)
+    #: Имя без ведущих дефисов (например, ``"username"``).
+    name: str
+    #: Имя атрибута в ``SimpleNamespace`` (по умолчанию — ``name``).
+    dest: str = ""
+    #: Обязателен ли флаг.
+    required: bool = False
+    #: Преобразователь типа (``str``/``float``/``int``); ``None`` — строка.
+    type: Callable[[str], Any] | None = None
+    #: Значение по умолчанию.
+    default: Any = None
+    #: Допустимые значения (для валидации, как ``choices`` в argparse).
+    choices: tuple[str, ...] | None = None
 
-    p_login = subparsers.add_parser("login", help="Войти в систему")
-    p_login.add_argument("--username", required=True)
-    p_login.add_argument("--password", required=True)
-    p_login.set_defaults(func=login_command)
 
-    p_logout = subparsers.add_parser("logout", help="Выйти из системы")
-    p_logout.set_defaults(func=logout_command)
+@dataclass(frozen=True)
+class _Command:
+    """Описание команды: обработчик, флаги и подсказка."""
 
-    p_portfolio = subparsers.add_parser("show-portfolio", help="Показать портфель")
-    p_portfolio.add_argument("--base", default="USD")
-    p_portfolio.set_defaults(func=show_portfolio_command)
+    handler: Callable[[SimpleNamespace], None]
+    options: tuple[_Option, ...] = ()
+    help: str = ""
 
-    p_buy = subparsers.add_parser("buy", help="Купить валюту")
-    p_buy.add_argument("--currency", required=True)
-    p_buy.add_argument("--amount", type=float, required=True)
-    p_buy.set_defaults(func=buy_command)
 
-    p_sell = subparsers.add_parser("sell", help="Продать валюту")
-    p_sell.add_argument("--currency", required=True)
-    p_sell.add_argument("--amount", type=float, required=True)
-    p_sell.set_defaults(func=sell_command)
+#: Реестр команд CLI: имя → описание.
+COMMANDS: dict[str, _Command] = {
+    "register": _Command(
+        handler=register_command,
+        help="Создать пользователя",
+        options=(
+            _Option("username", required=True),
+            _Option("password", required=True),
+        ),
+    ),
+    "login": _Command(
+        handler=login_command,
+        help="Войти в систему",
+        options=(
+            _Option("username", required=True),
+            _Option("password", required=True),
+        ),
+    ),
+    "logout": _Command(handler=logout_command, help="Выйти из системы"),
+    "show-portfolio": _Command(
+        handler=show_portfolio_command,
+        help="Показать портфель",
+        options=(_Option("base", default="USD"),),
+    ),
+    "buy": _Command(
+        handler=buy_command,
+        help="Купить валюту",
+        options=(
+            _Option("currency", required=True),
+            _Option("amount", type=float, required=True),
+        ),
+    ),
+    "sell": _Command(
+        handler=sell_command,
+        help="Продать валюту",
+        options=(
+            _Option("currency", required=True),
+            _Option("amount", type=float, required=True),
+        ),
+    ),
+    "get-rate": _Command(
+        handler=get_rate_command,
+        help="Получить курс валюты",
+        options=(
+            _Option("from", dest="from_currency", required=True),
+            _Option("to", dest="to_currency", required=True),
+        ),
+    ),
+    "update-rates": _Command(
+        handler=update_rates_command,
+        help="Обновить курсы",
+        options=(
+            _Option("source", default=None, choices=("coingecko", "exchangerate")),
+        ),
+    ),
+    "show-rates": _Command(
+        handler=show_rates_command,
+        help="Показать курсы из кеша",
+        options=(
+            _Option("currency", default=None),
+            _Option("top", type=int, default=None),
+            _Option("base", default=None),
+        ),
+    ),
+}
 
-    p_rate = subparsers.add_parser("get-rate", help="Получить курс валюты")
-    p_rate.add_argument("--from", dest="from_currency", required=True)
-    p_rate.add_argument("--to", dest="to_currency", required=True)
-    p_rate.set_defaults(func=get_rate_command)
+__all__ = ["COMMANDS", "main", "run_command"]
 
-    p_update = subparsers.add_parser("update-rates", help="Обновить курсы")
-    p_update.add_argument(
-        "--source",
-        choices=["coingecko", "exchangerate"],
-        default=None,
-    )
-    p_update.set_defaults(func=update_rates_command)
 
-    p_show = subparsers.add_parser("show-rates", help="Показать курсы из кеша")
-    p_show.add_argument("--currency", default=None)
-    p_show.add_argument("--top", type=int, default=None)
-    p_show.add_argument("--base", default=None)
-    p_show.set_defaults(func=show_rates_command)
+class _UsageError(Exception):
+    """Ошибка разбора аргументов: неизвестный флаг, пропуск обязательного и т.п."""
 
-    return parser
+
+def _tokenize(raw: str | list[str]) -> list[str]:
+    """Разбивает строку на токены через ``shlex``.
+
+    Строка ``'buy --currency BTC --amount 0.05'`` превращается в список
+    аргументов; кавычки поддерживаются (``--password "a b"``).
+
+    Args:
+        raw: Строка команды или уже готовый список токенов.
+
+    Returns:
+        Список токенов.
+
+    Raises:
+        _UsageError: Если кавычки в строке не закрыты.
+    """
+    if isinstance(raw, str):
+        try:
+            return shlex.split(raw)
+        except ValueError as exc:
+            raise _UsageError(f"Некорректная строка команды: {exc}") from exc
+    return list(raw)
+
+
+def _parse_options(command: _Command, tokens: list[str]) -> SimpleNamespace:
+    """Разбирает флаги ``--name value`` в объект ``SimpleNamespace``.
+
+    Raises:
+        _UsageError: При неизвестном флаге, отсутствии значения, неверном
+            типе, недопустимом значении или пропуске обязательного флага.
+    """
+    by_name = {option.name: option for option in command.options}
+    values: dict[str, Any] = {option.name: option.default for option in command.options}
+    seen: set[str] = set()
+
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token.startswith("--"):
+            raise _UsageError(f"Неожиданный аргумент: '{token}'")
+
+        name = token[2:]
+        if "=" in name:
+            name, _, inline = name.partition("=")
+        else:
+            inline = None
+
+        option = by_name.get(name)
+        if option is None:
+            raise _UsageError(f"Неизвестный флаг: '{token}'")
+
+        if inline is not None:
+            raw_value = inline
+        else:
+            index += 1
+            if index >= len(tokens):
+                raise _UsageError(f"Для флага '--{name}' не указано значение")
+            raw_value = tokens[index]
+
+        if option.type is not None:
+            try:
+                raw_value = option.type(raw_value)
+            except (TypeError, ValueError) as exc:
+                type_name = getattr(option.type, "__name__", str(option.type))
+                raise _UsageError(
+                    f"Флаг '--{name}' ожидает значение типа {type_name}"
+                ) from exc
+
+        if option.choices is not None and raw_value not in option.choices:
+            allowed = ", ".join(option.choices)
+            raise _UsageError(f"Флаг '--{name}' должен быть одним из: {allowed}")
+
+        values[option.name] = raw_value
+        seen.add(option.name)
+        index += 1
+
+    missing = [
+        option.name
+        for option in command.options
+        if option.required and option.name not in seen
+    ]
+    if missing:
+        flags = ", ".join(f"--{name}" for name in missing)
+        raise _UsageError(f"Отсутствует обязательный флаг: {flags}")
+
+    resolved = {
+        (option.dest or option.name): values[option.name] for option in command.options
+    }
+    return SimpleNamespace(**resolved)
+
+
+def run_command(raw: str | list[str]) -> int:
+    """Разбирает строку команды и выполняет соответствующий обработчик.
+
+    Args:
+        raw: Строка вида ``"buy --currency BTC --amount 0.05"`` или список
+            токенов.
+
+    Returns:
+        Код возврата (0 — успех, 2 — ошибка разбора аргументов).
+    """
+    setup_logging()
+    tokens = _tokenize(raw)
+    if not tokens:
+        print_help()
+        return 1
+
+    name, *rest = tokens
+    command = COMMANDS.get(name)
+    if command is None:
+        print(f"Неизвестная команда: '{name}'")
+        print_help()
+        return 2
+
+    try:
+        args = _parse_options(command, rest)
+    except _UsageError as exc:
+        print(f"Ошибка аргументов: {exc}")
+        print(f"Использование: {_usage(name)}")
+        return 2
+
+    command.handler(args)
+    return 0
+
+
+def _usage(name: str) -> str:
+    """Собирает строку использования команды для подсказок об ошибках."""
+    command = COMMANDS.get(name)
+    if command is None:
+        return name
+    parts = [name]
+    for option in command.options:
+        flag = f"--{option.name}"
+        if option.required:
+            parts.append(f"{flag} <{_type_label(option)}>")
+        else:
+            parts.append(f"[{flag}]")
+    return " ".join(parts)
+
+
+def _type_label(option: _Option) -> str:
+    """Человекочитаемое имя типа для подсказки использования."""
+    if option.type is float:
+        return "float"
+    if option.type is int:
+        return "int"
+    return "str"
+
+
+def print_help() -> None:
+    """Печатает список доступных команд."""
+    print("ValutaTrade Hub — симулятор валютного кошелька.")
+    print("Доступные команды:")
+    for name, command in COMMANDS.items():
+        print(f"  {_usage(name):<45} {command.help}")
 
 
 def main(argv: list[str] | None = None) -> int:
     """Точка входа CLI.
 
+    Args:
+        argv: Аргументы без имени программы. Если не переданы, берётся
+            ``sys.argv[1:]`` и склеивается в строку для ``shlex``.
+
     Returns:
         Код возврата (0 — успех).
     """
-    setup_logging()
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-    handler = getattr(args, "func", None)
-    if handler is None:
-        parser.print_help()
-        return 1
-    handler(args)
-    return 0
+    if argv is None:
+        argv = sys.argv[1:]
+    return run_command(argv)
 
 
 if __name__ == "__main__":

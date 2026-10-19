@@ -260,15 +260,15 @@ class Portfolio:
 
     def get_total_value(
         self,
-        exchange_rates: dict[str, float] | None = None,
         base_currency: str = "USD",
+        exchange_rates: dict[str, float] | None = None,
     ) -> float:
         """Суммарная стоимость кошельков в ``base_currency``.
 
         Args:
+            base_currency: Базовая валюта (по умолчанию USD).
             exchange_rates: Курсы вида ``{code: сколько USD стоит 1 единица}``.
                 Если не передан — берутся резервные ``DEFAULT_RATES``.
-            base_currency: Базовая валюта (по умолчанию USD).
 
         Raises:
             ValueError: Если базовая валюта неизвестна.

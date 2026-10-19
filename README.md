@@ -15,7 +15,7 @@
 * [`ruff`](https://docs.astral.sh/ruff/) — линтер и форматтер (PEP8);
 * `requests` — обращения к внешним API;
 * `prettytable` — форматированный вывод таблиц;
-* стандартные модули: `json`, `argparse`, `hashlib`, `logging`, `tomllib`.
+* стандартные модули: `json`, `shlex`, `hashlib`, `logging`, `tomllib`.
 
 ## Структура проекта
 
