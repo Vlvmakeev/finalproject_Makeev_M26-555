@@ -6,9 +6,9 @@ def log_action(verbose: bool = False):
     """
     Декоратор для логирования
 
-    :param
+    Args:
         verbose: Если True, добавляет дополнительнй контекст
-    :return:
+    Returns:
         decorator: Функция-декоратор
     """
     def decorator(func):

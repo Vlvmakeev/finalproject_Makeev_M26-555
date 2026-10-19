@@ -59,7 +59,7 @@ class User:
         return self._registration_date
 
     @staticmethod
-    def _hash(password: str, salt: str) -> str:
+    def _hash_password(password: str, salt: str) -> str:
         return hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
 
     @classmethod
@@ -70,7 +70,7 @@ class User:
             raise ValueError("Пароль должен быть не короче 4-х символов")
 
         salt = secrets.token_hex(8)
-        hashed = cls._hash(password, salt)
+        hashed = cls._hash_password(password, salt)
         return cls(user_id=user_id, username=username, hashed_password=hashed, salt=salt, registration_date=datetime.now())
 
     def get_user_info(self) -> dict:
@@ -84,10 +84,10 @@ class User:
     def change_password(self, new_password: str) -> None:
         if len(new_password) < 4:
             raise ValueError("Пароль должен быть не менее 4-х символов")
-        self._hashed_password = self._hash(new_password, self.salt)
+        self._hashed_password = self._hash_password(new_password, self.salt)
 
     def verify_password(self, password: str) -> bool:
-        return self._hash(password, self.salt) == self._hashed_password
+        return self._hash_password(password, self.salt) == self._hashed_password
 
     def to_dict(self) -> dict:
         return {

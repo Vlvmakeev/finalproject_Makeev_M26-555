@@ -17,15 +17,15 @@ class SettingsLoader:
             return
 
         self._config = {
-            "data_dir": "data",
-            "users_file": "data/users.json",
-            "portfolios_file": "data/portfolios.json",
-            "rates_file": "data/rates.json",
-            "log_dir": "logs",
-            "log_file": "logs/actions.log",
-            "log_level": "INFO",
-            "rates_ttl_seconds": 60,
-            "default_base_currency": "USD"
+            "DATA_DIR": "data",
+            "USERS_FILE": "data/users.json",
+            "PORTFOLIOS_FILE": "data/portfolios.json",
+            "RATES_FILE": "data/rates.json",
+            "LOG_DIR": "logs",
+            "LOG_FILE": "logs/actions.log",
+            "LOG_LEVEL": "INFO",
+            "RATES_TTL_SECONDS": 60,
+            "DEFAULT_BASE_CURRENCY": "USD"
         }
 
         self._initialized = True
