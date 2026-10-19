@@ -1,16 +1,17 @@
 from datetime import datetime
 import secrets
 import datetime
-from logging import raiseExceptions
 
 from valutatrade_hub.core.models import User
 from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.core.decorators import log_action
 
 
+@log_action(verbose=True)
 def register_user(username: str, password: str) -> User:
     """
-    Создает нового пользователя и пустой портфель
+    Создание нового пользователя и пустого портфеля
     :param username:
     :param password:
     :return: объект User
@@ -52,7 +53,10 @@ def register_user(username: str, password: str) -> User:
 
     return user
 
-def login(username: str, password: str) -> User:
+@log_action(verbose=True)
+def login(username: str, password: str):
+    """Аутентификация пльзователя в системе"""
+
     settings = SettingsLoader()
     db = DatabaseManager()
     users_path = settings.get("USERS_FILE_PATH")
@@ -61,6 +65,10 @@ def login(username: str, password: str) -> User:
 
     if not any(u["username"] == username for u in users_raw):
         raise ValueError(f"Пользователь с username {username} отсутствует в базе данных")
+
+def buy(user_id: int, currency_code: str, amount: float):
+    """Покупка валюты"""
+    pass
 
     
 
