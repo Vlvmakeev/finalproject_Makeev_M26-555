@@ -6,5 +6,9 @@
                 "balance": 0.01
             }
         }
+    },
+    {
+        "user_id": 2,
+        "wallets": {}
     }
 ]

@@ -26,27 +26,30 @@ finalproject_Makeev_M26-555/
 │   ├── portfolios.json       # портфели и кошельки
 │   ├── rates.json            # локальный кеш курсов для Core Service
 │   └── exchange_rates.json   # история измерений Parser Service
-├── valutatrade_hub/
-│   ├── __init__.py
-│   ├── logging_config.py     # настройка логов (формат, уровень, ротация)
-│   ├── decorators.py         # @log_action
-│   ├── core/
-│   │   ├── currencies.py     # Currency / FiatCurrency / CryptoCurrency + реестр
-│   │   ├── exceptions.py     # доменные исключения
-│   │   ├── models.py         # User, Wallet, Portfolio
-│   │   ├── usecases.py       # бизнес-логика (register/login/buy/sell/get_rate)
-│   │   └── utils.py          # валидации и конвертации
-│   ├── infra/
-│   │   ├── settings.py       # Singleton SettingsLoader
-│   │   └── database.py       # Singleton DatabaseManager (JSON-хранилище)
-│   ├── parser_service/
-│   │   ├── config.py         # конфигурация API и путей
-│   │   ├── api_clients.py    # BaseApiClient, CoinGeckoClient, ExchangeRateApiClient
-│   │   ├── updater.py        # RatesUpdater.run_update()
-│   │   ├── storage.py        # rates.json / exchange_rates.json (атомарная запись)
-│   │   └── scheduler.py      # периодическое обновление
-│   └── cli/
-│       └── interface.py      # команды CLI (единственная точка входа для команд)
+├── src/
+│   ├── finalproject_makeev_m26_555/
+│   │   └── __init__.py       # обёртка-точка входа (`run`)
+│   └── valutatrade_hub/
+│       ├── __init__.py
+│       ├── logging_config.py # настройка логов (формат, уровень, ротация)
+│       ├── decorators.py     # @log_action
+│       ├── core/
+│       │   ├── currencies.py # Currency / FiatCurrency / CryptoCurrency + реестр
+│       │   ├── exceptions.py # доменные исключения
+│       │   ├── models.py     # User, Wallet, Portfolio
+│       │   ├── usecases.py   # бизнес-логика (register/login/buy/sell/get_rate)
+│       │   └── utils.py      # валидации и конвертации
+│       ├── infra/
+│       │   ├── settings.py   # Singleton SettingsLoader
+│       │   └── database.py   # Singleton DatabaseManager (JSON-хранилище)
+│       ├── parser_service/
+│       │   ├── config.py     # конфигурация API и путей
+│       │   ├── api_clients.py # BaseApiClient, CoinGeckoClient, ExchangeRateApiClient
+│       │   ├── updater.py    # RatesUpdater.run_update()
+│       │   ├── storage.py    # rates.json / exchange_rates.json (атомарная запись)
+│       │   └── scheduler.py  # периодическое обновление
+│       └── cli/
+│           └── interface.py  # команды CLI (единственная точка входа для команд)
 ├── main.py
 ├── pyproject.toml
 ├── uv.lock

@@ -20,6 +20,10 @@ finalproject-makeev-m26-555 = "finalproject_makeev_m26_555:run"
 requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-name = ["finalproject_makeev_m26_555", "valutatrade_hub"]
+module-root = "src"
+
 [dependency-groups]
 dev = [
     "ruff>=0.17.0",
