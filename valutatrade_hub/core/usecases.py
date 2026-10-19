@@ -1,6 +1,7 @@
 from datetime import datetime
 import secrets
 import datetime
+from logging import raiseExceptions
 
 from valutatrade_hub.core.models import User
 from valutatrade_hub.infra.database import DatabaseManager
@@ -50,3 +51,16 @@ def register_user(username: str, password: str) -> User:
     db.write_json(portfolio_path, portfolios)
 
     return user
+
+def login(username: str, password: str) -> User:
+    settings = SettingsLoader()
+    db = DatabaseManager()
+    users_path = settings.get("USERS_FILE_PATH")
+    users_raw = db.read_json(users_path)
+    user = None
+
+    if not any(u["username"] == username for u in users_raw):
+        raise ValueError(f"Пользователь с username {username} отсутствует в базе данных")
+
+    
+
