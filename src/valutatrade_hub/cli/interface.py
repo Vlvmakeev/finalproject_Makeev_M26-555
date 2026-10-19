@@ -237,6 +237,21 @@ def _cache_last_refresh() -> str:
     return ""
 
 
+def _rates_to_usd(pairs: dict[str, Any]) -> dict[str, float]:
+    """Собирает курсы ``{code: сколько USD стоит 1 единица}`` из пар кеша."""
+    from valutatrade_hub.core.models import DEFAULT_RATES
+
+    rates = dict(DEFAULT_RATES)
+    for pair_key, payload in pairs.items():
+        rate = payload.get("rate") if isinstance(payload, dict) else payload
+        if rate is None:
+            continue
+        from_code, _, to_code = pair_key.partition("_")
+        if to_code == "USD":
+            rates[from_code] = float(rate)
+    return rates
+
+
 def show_rates_command(args: argparse.Namespace) -> None:
     """Команда показа курсов из локального кеша."""
     pairs = _load_cache_pairs()
@@ -257,11 +272,26 @@ def show_rates_command(args: argparse.Namespace) -> None:
             return
         pairs = filtered
 
+    base = None
+    base_rate = 1.0
+    if args.base:
+        base = args.base.upper()
+        usd_rates = _rates_to_usd(_load_cache_pairs())
+        base_rate = usd_rates.get(base)
+        if not base_rate:
+            print(f"Курс для '{base}' не найден в кеше.")
+            return
+
     items = []
     for pair_key, payload in pairs.items():
         rate = payload.get("rate") if isinstance(payload, dict) else payload
         updated = payload.get("updated_at", "") if isinstance(payload, dict) else ""
-        items.append((pair_key, float(rate), updated))
+        value = float(rate)
+        if base is not None:
+            from_code = pair_key.split("_")[0]
+            pair_key = f"{from_code}_{base}"
+            value = value / base_rate
+        items.append((pair_key, value, updated))
 
     if args.top:
         items.sort(key=lambda item: item[1], reverse=True)

@@ -35,18 +35,26 @@ class RatesUpdater:
         self.storage = storage
         self.config = config
 
-    def run_update(self, source: Optional[str] = None) -> dict[str, Any]:
+    def run_update(
+        self, source: Optional[str] = None, quiet: bool = False
+    ) -> dict[str, Any]:
         """Запускает обновление курсов.
 
         Падение одного клиента не прерывает обновление остальных.
 
         Args:
             source: Опциональный фильтр ("coingecko"/"exchangerate").
+            quiet: Не выводить прогресс в stdout (для внутренних вызовов).
 
         Returns:
             Сводка: ``success``, ``rates_count``, ``errors``, ``last_refresh``.
         """
-        print("INFO: Starting rates update...")
+
+        def _echo(message: str) -> None:
+            if not quiet:
+                print(message)
+
+        _echo("INFO: Starting rates update...")
         logger.info("Starting rates update...")
 
         all_rates: dict[str, float] = {}
@@ -61,18 +69,18 @@ class RatesUpdater:
                 message = f"Failed to fetch from {client.name}: {exc}"
                 logger.error(message)
                 errors.append(message)
-                print(f"ERROR: {message}")
+                _echo(f"ERROR: {message}")
                 continue
 
             if rates:
                 all_rates.update(rates)
-                print(f"INFO: Fetching from {client.name}... OK ({len(rates)} rates)")
+                _echo(f"INFO: Fetching from {client.name}... OK ({len(rates)} rates)")
 
         last_refresh = self.storage.utc_timestamp()
 
         if all_rates:
             self.storage.save_rates_cache(all_rates, last_refresh)
-            print(
+            _echo(
                 f"INFO: Writing {len(all_rates)} rates to "
                 f"{self.config.RATES_FILE_PATH}..."
             )
@@ -83,7 +91,7 @@ class RatesUpdater:
             self.storage.save_exchange_history(records)
         else:
             logger.warning("No rates fetched from any source")
-            print("WARNING: No rates fetched from any source")
+            _echo("WARNING: No rates fetched from any source")
 
         result = {
             "success": not errors,
@@ -93,9 +101,9 @@ class RatesUpdater:
         }
 
         if errors:
-            print("Update completed with errors. Check logs/actions.log for details.")
+            _echo("Update completed with errors. Check logs/actions.log for details.")
         else:
-            print(
+            _echo(
                 f"Update successful. Total rates updated: {len(all_rates)}. "
                 f"Last refresh: {last_refresh}"
             )

@@ -1,11 +1,13 @@
 """Бизнес-логика приложения: регистрация, вход, портфель, buy/sell, курс."""
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from valutatrade_hub.core.currencies import get_currency
 from valutatrade_hub.core.exceptions import (
     ApiRequestError,
+    CurrencyNotFoundError,
     InvalidPasswordError,
     UsernameAlreadyExistsError,
     UserNotFoundError,
@@ -21,6 +23,9 @@ from valutatrade_hub.core.utils import (
 )
 from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.logging_config import suppress_console
+
+logger = logging.getLogger("valutatrade_hub.core.usecases")
 
 BASE_CURRENCY = "USD"
 
@@ -146,16 +151,41 @@ def _rates_to_usd() -> dict[str, float]:
     return rates
 
 
-def get_rate(from_code: str, to_code: str) -> dict[str, Any]:
-    """Возвращает курс ``from_code`` → ``to_code`` и метаданные кеша.
+def refresh_rates(source: str | None = None) -> dict[str, Any]:
+    """Обновляет кеш курсов через Parser Service.
+
+    Args:
+        source: Опциональный фильтр источника ("coingecko"/"exchangerate").
 
     Raises:
-        CurrencyNotFoundError: Если одна из валют неизвестна.
-        ApiRequestError: Если данных нет и кеш устарел.
+        ApiRequestError: Если не удалось обновить ни одного курса.
     """
-    from_code = validate_currency_code(from_code)
-    to_code = validate_currency_code(to_code)
+    from valutatrade_hub.parser_service.api_clients import (
+        CoinGeckoClient,
+        ExchangeRateApiClient,
+    )
+    from valutatrade_hub.parser_service.config import ParserConfig
+    from valutatrade_hub.parser_service.storage import RatesStorage
+    from valutatrade_hub.parser_service.updater import RatesUpdater
 
+    config = ParserConfig()
+    storage = RatesStorage(config)
+    clients = [CoinGeckoClient(config), ExchangeRateApiClient(config)]
+    updater = RatesUpdater(clients, storage, config)
+
+    # Внутреннее обновление не должно шуметь в консоль: ожидаемые сбои
+    # источников пишутся в файл, но не мешают выводу CLI.
+    with suppress_console():
+        result = updater.run_update(source=source, quiet=True)
+
+    if not result.get("rates_count"):
+        reason = "; ".join(result.get("errors") or []) or "нет данных"
+        raise ApiRequestError(reason)
+    return result
+
+
+def _rate_from_cache(from_code: str, to_code: str) -> dict[str, Any] | None:
+    """Возвращает свежий курс из кеша или ``None``."""
     cached = load_cached_rates()
     pair_key = f"{from_code}_{to_code}"
     reverse_key = f"{to_code}_{from_code}"
@@ -174,21 +204,44 @@ def get_rate(from_code: str, to_code: str) -> dict[str, Any]:
 
     reverse = cached.get(reverse_key)
     if reverse and reverse.get("rate"):
-        rate = 1.0 / float(reverse["rate"])
         return {
             "from": from_code,
             "to": to_code,
-            "rate": rate,
+            "rate": 1.0 / float(reverse["rate"]),
             "updated_at": reverse.get("updated_at"),
             "source": reverse.get("source", "cache"),
         }
+    return None
 
-    if payload:
-        # Кеш есть, но устарел — сообщаем об этом.
+
+def get_rate(from_code: str, to_code: str) -> dict[str, Any]:
+    """Возвращает курс ``from_code`` → ``to_code`` и метаданные кеша.
+
+    Если кеш устарел или отсутствует, предпринимается попытка обновить его
+    через Parser Service; при неудаче бросается ``ApiRequestError``.
+
+    Raises:
+        CurrencyNotFoundError: Если одна из валют неизвестна.
+        ApiRequestError: Если данных нет и обновить кеш не удалось.
+    """
+    from_code = validate_currency_code(from_code)
+    to_code = validate_currency_code(to_code)
+
+    result = _rate_from_cache(from_code, to_code)
+    if result is not None:
+        return result
+
+    try:
+        refresh_rates()
+    except ApiRequestError as exc:
+        logger.warning("Не удалось обновить кеш курсов: %s", exc)
         raise ApiRequestError(
-            f"курс {from_code}→{to_code} устарел. Повторите попытку позже "
-            f"или выполните 'update-rates'."
-        )
+            f"курс {from_code}→{to_code} недоступен. Повторите попытку позже."
+        ) from exc
+
+    result = _rate_from_cache(from_code, to_code)
+    if result is not None:
+        return result
 
     raise ApiRequestError(
         f"курс {from_code}→{to_code} недоступен. Повторите попытку позже."
@@ -286,6 +339,10 @@ def _rate_to_base(currency_code: str) -> float:
 def portfolio_view(user_id: int, base: str = BASE_CURRENCY) -> dict[str, Any]:
     """Собирает данные портфеля для показа из CLI.
 
+    Стоимость каждого кошелька и итог приводятся к ``base``.
+    Резервные ``DEFAULT_RATES`` гарантируют наличие курса для базовой валюты,
+    поэтому базовая валюта всегда известна.
+
     Raises:
         CurrencyNotFoundError: Если базовая валюта неизвестна.
     """
@@ -293,11 +350,15 @@ def portfolio_view(user_id: int, base: str = BASE_CURRENCY) -> dict[str, Any]:
     portfolio = get_portfolio(user_id)
     rates = _rates_to_usd()
 
+    base_rate = rates.get(base)
+    if not base_rate:
+        raise CurrencyNotFoundError(base)
+
     rows = []
     total = 0.0
     for code, wallet in portfolio.wallets.items():
         rate = rates.get(code)
-        value = wallet.balance * rate if rate and base == BASE_CURRENCY else None
+        value = wallet.balance * rate / base_rate if rate else None
         if value is not None:
             total += value
         rows.append(

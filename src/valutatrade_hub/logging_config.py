@@ -61,3 +61,32 @@ def get_logger(name: str) -> logging.Logger:
     """Возвращает дочерний логгер проекта с настроенными обработчиками."""
     setup_logging()
     return logging.getLogger(f"valutatrade_hub.{name}")
+
+
+class suppress_console:
+    """Контекстный менеджер: временно глушит консольный вывод логов.
+
+    Файловые обработчики продолжают работать, поэтому диагностика
+    сохраняется в ``logs/actions.log``. Используется для внутренних
+    операций, которые не должны засорять вывод CLI (например, попытка
+    обновить курс внутри ``get-rate``).
+    """
+
+    def __init__(self, level: int = logging.CRITICAL):
+        self._level = level
+        self._handlers: list[tuple[logging.Handler, int]] = []
+
+    def __enter__(self) -> "suppress_console":
+        logger = logging.getLogger("valutatrade_hub")
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler, logging.FileHandler
+            ):
+                self._handlers.append((handler, handler.level))
+                handler.setLevel(self._level)
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        for handler, level in self._handlers:
+            handler.setLevel(level)
+        self._handlers.clear()
